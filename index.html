@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cybersecurity Controls Navigator</title>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#ffffff">
+    <link rel="apple-touch-icon" href="/logo.svg">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+      }
+    </script>
+    <style>
+      body {
+        font-family: 'Inter', sans-serif;
+      }
+      @import url('https://rsms.me/inter/inter.css');
+
+      /* Loading Indicator Styles */
+      #loading-indicator {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+      }
+      #loading-indicator svg {
+        width: 6rem; /* 96px */
+        height: 6rem; /* 96px */
+        color: #0d9488; /* teal-600 */
+        animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+      }
+      #loading-indicator p {
+        margin-top: 1.5rem;
+        font-size: 1.125rem; /* text-lg */
+        font-weight: 600; /* font-semibold */
+        color: #374151; /* text-gray-700 */
+      }
+      .dark #loading-indicator p {
+        color: #d1d5db; /* dark:text-gray-300 */
+      }
+      @keyframes pulse {
+        0%, 100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.6;
+        }
+      }
+
+      @media print {
+        body {
+          background-color: white !important;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+        #root > div {
+            display: block !important;
+        }
+        .no-print, header, aside, .sidebar, #live-assistant-widget-button, #chat-widget-button {
+          display: none !important;
+        }
+        main {
+            padding: 0 !important;
+            overflow: visible !important;
+        }
+        .risk-assessment-page, .risk-assessment-page > div {
+            margin: 0;
+            padding: 0;
+        }
+        .risk-assessment-page h1 {
+            font-size: 24pt;
+            text-align: center;
+            margin-bottom: 24px;
+        }
+        .risk-assessment-page p {
+            display: none;
+        }
+        .risk-assessment-page h1 + p {
+            display: block;
+            text-align: center;
+            font-size: 12pt;
+            color: #555;
+            margin-bottom: 32px;
+        }
+        .bg-white, .dark .bg-gray-800 {
+            background-color: transparent !important;
+            box-shadow: none !important;
+            border: 1px solid #ccc !important;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            page-break-inside: auto;
+        }
+        tr {
+            page-break-inside: avoid;
+            page-break-after: auto;
+        }
+        thead {
+            display: table-header-group;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            font-size: 9pt;
+            color: black !important;
+        }
+        td textarea, td input, td select {
+            border: none !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+            width: 100%;
+            -webkit-print-color-adjust: exact;
+        }
+        .risk-heatmap {
+            page-break-before: always;
+            padding-top: 2rem;
+        }
+        .risk-heatmap .group {
+            position: static;
+        }
+        .risk-heatmap .group > div:last-child {
+            display: none !important;
+        }
+        .risk-heatmap [class*="bg-"] {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+            color: white !important;
+        }
+        .dark .risk-heatmap .dark\\:text-gray-800 {
+            color: black !important;
+        }
+        .risk-heatmap .text-2xl {
+            font-size: 18pt !important;
+        }
+      }
+    </style>
+    <script>
+      // Prevents flash of incorrect theme
+      if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+    <script src="https://unpkg.com/jspdf@latest/dist/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://unpkg.com/html-to-docx-ts@1.8.0/dist/browser/html-to-docx.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.1.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
+    "react/": "https://aistudiocdn.com/react@^19.1.1/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.16.0",
+    "@clerk/clerk-react": "https://esm.sh/@clerk/clerk-react@5"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body class="bg-gray-50 dark:bg-gray-900">
+    <div id="root">
+      <div id="loading-indicator">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path d="M12 2L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-3z" />
+        </svg>
+        <p>Loading Cybersecurity Controls Navigator...</p>
+      </div>
+    </div>
+    <script type="module" src="/index.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').then(registration => {
+            console.log('ServiceWorker registration successful with scope: ', registration.scope);
+          }, err => {
+            console.log('ServiceWorker registration failed: ', err);
+          });
+        });
+      }
+    </script>
+  </body>
+</html>
