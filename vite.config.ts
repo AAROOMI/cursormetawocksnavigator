@@ -5,6 +5,9 @@ import react from '@vitejs/plugin-react';
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
     return {
+      // Set correct base when building in GitHub Actions for project pages
+      // e.g. https://<user>.github.io/cursormetawocksnavigator/
+      base: process.env.GITHUB_REPOSITORY ? '/cursormetawocksnavigator/' : '/',
       server: {
         port: 3000,
         host: '0.0.0.0',
