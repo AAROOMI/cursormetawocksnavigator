@@ -46,6 +46,7 @@ import { ClerkAuthWrapper } from './components/ClerkAuthWrapper';
 import { isClerkConfigured } from './lib/clerkIntegration';
 import { UserButton } from '@clerk/clerk-react';
 import { ConfigStatusBanner } from './components/ConfigStatusBanner';
+import { isSupabaseConfigured, companyService, documentService, auditLogService } from './lib/supabaseIntegration';
 
 
 declare const QRCode: any;
@@ -164,6 +165,8 @@ const App: React.FC = () => {
 
   // Check if Clerk is configured
   const useClerkAuth = isClerkConfigured();
+  // Check if Supabase is configured
+  const useSupabase = isSupabaseConfigured();
 
   const [appState, setAppState] = useState<AppState>(useClerkAuth ? 'app' : 'login');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -264,6 +267,16 @@ const App: React.FC = () => {
       targetId
     };
 
+    if (useSupabase) {
+      try {
+        auditLogService.create(newLogEntry, companyIdForLog).catch((e) =>
+          console.error('Failed to persist audit log to Supabase', e)
+        );
+      } catch (e) {
+        console.error('Audit log Supabase error', e);
+      }
+    }
+
     setAllCompanyData(prevData => {
       const currentData = prevData[companyIdForLog] || { users: [], documents: [], auditLog: [], tasks: [] };
       const newAuditLog = [newLogEntry, ...(currentData.auditLog || [])]; 
@@ -349,27 +362,39 @@ const App: React.FC = () => {
     try {
         const savedCompaniesData = window.localStorage.getItem('companies');
         if (!savedCompaniesData || savedCompaniesData === '[]') {
-            console.log("No companies found in localStorage. Seeding with default data.");
-            setAppState('login'); // Can be 'setup' if we want first user to setup
-            const defaultCompanyId = 'default-company-1';
-            const defaultCompany: CompanyProfile = {
-                id: defaultCompanyId, name: 'Example Corp', logo: '', ceoName: 'Michael Chen', cioName: 'Fatima Khan', cisoName: 'Samia Ahmed', ctoName: 'John Doe',
-                cybersecurityOfficerName: 'Ali Hassan', dpoName: 'Nora Saleh', complianceOfficerName: 'Omar Abdullah',
-                license: { key: 'default-starter-key', status: 'active', tier: 'yearly', expiresAt: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).getTime() }
-            };
-            const defaultCompanyData: CompanyData = {
-                users: initialUsers, documents: [], auditLog: [], eccAssessment: initialAssessmentData, pdplAssessment: initialPdplAssessmentData, samaCsfAssessment: initialSamaCsfAssessmentData,
-                cmaAssessment: initialCmaAssessmentData, hrsdAssessment: initialHrsdAssessmentData, riskAssessmentData: initialRiskData, assessmentStatuses: { ecc: 'idle', pdpl: 'idle', sama: 'idle', cma: 'idle', hrsd: 'idle', riskAssessment: 'idle' },
-                trainingProgress: {}, tasks: [],
-            };
-            setCompanies([defaultCompany]);
-            setAllCompanyData({ [defaultCompanyId]: defaultCompanyData });
-            
-            const { logo, ...companyToStore } = defaultCompany;
-            window.localStorage.setItem('companies', JSON.stringify([companyToStore]));
-            window.localStorage.setItem('companyLogos', JSON.stringify({}));
-            window.localStorage.setItem(`companyData-${defaultCompanyId}`, JSON.stringify(defaultCompanyData));
-            return;
+            if (useSupabase) {
+                // Load from Supabase
+                companyService.getAll().then((loaded) => {
+                    if (loaded.length > 0) {
+                        setCompanies(loaded);
+                    } else {
+                        setCompanies([]);
+                    }
+                }).catch((e) => console.error('Failed to load companies from Supabase', e));
+                return;
+            } else {
+                console.log("No companies found in localStorage. Seeding with default data.");
+                setAppState('login'); // Can be 'setup' if we want first user to setup
+                const defaultCompanyId = 'default-company-1';
+                const defaultCompany: CompanyProfile = {
+                    id: defaultCompanyId, name: 'Example Corp', logo: '', ceoName: 'Michael Chen', cioName: 'Fatima Khan', cisoName: 'Samia Ahmed', ctoName: 'John Doe',
+                    cybersecurityOfficerName: 'Ali Hassan', dpoName: 'Nora Saleh', complianceOfficerName: 'Omar Abdullah',
+                    license: { key: 'default-starter-key', status: 'active', tier: 'yearly', expiresAt: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).getTime() }
+                };
+                const defaultCompanyData: CompanyData = {
+                    users: initialUsers, documents: [], auditLog: [], eccAssessment: initialAssessmentData, pdplAssessment: initialPdplAssessmentData, samaCsfAssessment: initialSamaCsfAssessmentData,
+                    cmaAssessment: initialCmaAssessmentData, hrsdAssessment: initialHrsdAssessmentData, riskAssessmentData: initialRiskData, assessmentStatuses: { ecc: 'idle', pdpl: 'idle', sama: 'idle', cma: 'idle', hrsd: 'idle', riskAssessment: 'idle' },
+                    trainingProgress: {}, tasks: [],
+                };
+                setCompanies([defaultCompany]);
+                setAllCompanyData({ [defaultCompanyId]: defaultCompanyData });
+                
+                const { logo, ...companyToStore } = defaultCompany;
+                window.localStorage.setItem('companies', JSON.stringify([companyToStore]));
+                window.localStorage.setItem('companyLogos', JSON.stringify({}));
+                window.localStorage.setItem(`companyData-${defaultCompanyId}`, JSON.stringify(defaultCompanyData));
+                return;
+            }
         }
 
         const companiesWithoutLogos: Omit<CompanyProfile, 'logo'>[] = JSON.parse(savedCompaniesData);
@@ -422,6 +447,15 @@ const App: React.FC = () => {
     // This effect persists ALL company data to localStorage whenever it changes.
     // This is more robust and fixes issues where data was not saved when logged out (e.g., password reset).
     if (Object.keys(allCompanyData).length > 0) {
+        // Load documents for current company from Supabase when enabled
+        if (useSupabase && currentCompanyId) {
+            documentService.getByCompany(currentCompanyId).then((docs) => {
+                setAllCompanyData(prev => {
+                    const currentData = prev[currentCompanyId] || { users: [], documents: [], auditLog: [], tasks: [] };
+                    return { ...prev, [currentCompanyId]: { ...currentData, documents: docs } };
+                });
+            }).catch((e) => console.error('Failed to load documents from Supabase', e));
+        }
         Object.keys(allCompanyData).forEach(companyId => {
             try {
                 const dataToSave = allCompanyData[companyId];
@@ -433,7 +467,7 @@ const App: React.FC = () => {
             }
         });
     }
-  }, [allCompanyData]);
+  }, [allCompanyData, useSupabase, currentCompanyId]);
 
   // ... (All other handlers like handleInitiateAssessment, handleCompleteAssessment, etc. remain the same)
     const handleInitiateAssessment = (type: keyof AssessmentStatuses) => {
@@ -594,6 +628,9 @@ const App: React.FC = () => {
               addAuditLog('COMPANY_PROFILE_UPDATED', `Company profile updated: ${changes.join('; ')}.`, profile.id);
           }
           setCompanies(prev => prev.map(c => (c.id === profile.id ? profile : c)));
+          if (useSupabase) {
+              companyService.update(profile.id, profile).catch(e => console.error('Failed to update company in Supabase', e));
+          }
       }
       addNotification('Company profile saved successfully.', 'success');
   };
@@ -652,6 +689,13 @@ const App: React.FC = () => {
       barcodeDataUrl,
     };
     setDocumentRepositoryForCurrentCompany(prevRepo => [...prevRepo, newDocument]);
+    if (useSupabase) {
+        try {
+            await documentService.create(newDocument, currentCompanyId);
+        } catch (e) {
+            console.error('Failed to persist new document to Supabase', e);
+        }
+    }
     
     const companyUsers = allCompanyData[currentCompanyId]?.users || [];
     const cisoUsers = companyUsers.filter(u => u.role === 'CISO');
@@ -688,6 +732,14 @@ const App: React.FC = () => {
     }
     
     setDocumentRepositoryForCurrentCompany(prevRepo => prevRepo.map(d => d.id === documentId ? { ...d, status: newStatus, approvalHistory: newHistory, updatedAt: now } : d));
+    if (useSupabase) {
+        try {
+            const updated = { ...doc, status: newStatus, approvalHistory: newHistory, updatedAt: now };
+            await documentService.update(documentId, updated);
+        } catch (e) {
+            console.error('Failed to update document in Supabase', e);
+        }
+    }
 
     if (newStatus === 'Rejected') {
         addNotification(`Document ${doc.controlId} has been rejected.`, 'info');
@@ -1067,6 +1119,9 @@ const App: React.FC = () => {
         setCompanies(prev => [...prev, newCompany]);
         setAllCompanyData(prev => ({ ...prev, [companyId]: newCompanyData }));
         addNotification(`Company "${newCompany.name}" created with a 7-day trial.`, "success");
+        if (useSupabase) {
+            companyService.create(newCompany).catch(e => console.error('Failed to create company in Supabase', e));
+        }
     };
 
     // --- NOORA AI ASSISTANT LOGIC ---
